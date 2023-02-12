@@ -31,13 +31,11 @@ class KittLectureScraper:
     def get_lectures(self) -> list[Lecture]:
         html = self.get_lectures_html()
         bs = BeautifulSoup(html, 'html.parser')
-
-        lectures = []
         for week in bs.find_all(class_='lecture-week-container'):
             week_title = week.find(class_='week-title').text
-            for lecture_card in week.find_all(class_='lecture-list-card'):
-                lectures.append(self.parse_lecture_card(week_title, lecture_card))
-        return lectures
+            for lecture_card_html in week.find_all(class_='lecture-list-card'):
+                lecture = self.parse_lecture_card(week_title, lecture_card_html)
+                yield lecture
 
     def get_lecture_content_link(self, lecture_path) -> str:
         response = requests.get(f'{self.kitt_base_url}/{lecture_path}', cookies=self.auth_cookie)
@@ -48,47 +46,24 @@ class KittLectureScraper:
 
     def parse_lecture_card(self, week_title: str, lecture_bs: BeautifulSoup) -> Lecture:
         title = lecture_bs.find(class_='lecture-title').text.strip()
-        print(f'Processing HTML for {title}')
+        print(f'Processing lecture: {title}')
         lecture_path = lecture_bs.find(class_='lecture-card-link').get('href').strip('/')
         lecture_content_path = self.get_lecture_content_link(lecture_path)
         lecture = Lecture(week_title, title, lecture_path, lecture_content_path)
-        print(f'Processed lecture {lecture}')
+        print(f'Parsed lecture: {lecture}')
         return lecture
 
-    def check_content(self, lecture: Lecture):
-        if lecture.lecture_content_path:
-            url = f'{self.kitt_base_url}/{lecture.lecture_content_path}'
-            response = requests.get(url, cookies=self.auth_cookie)
-            if (response.status_code == 404):
-                print(f"Could not find lecture {lecture.name} at url: {url}")
-            else:
-                print(f"Found content for lecture {lecture.name}")
-        else:
-            print(f"Lecture {lecture.name} has no content")
-
-    def save_lecture_content_html(self, directory):
-        lectures = self.get_lectures()
-        for lecture in lectures:
-            if lecture.lecture_content_path:
-                url = f'{self.kitt_base_url}/{lecture.lecture_content_path}'
-                response = requests.get(url, cookies=self.auth_cookie)
-                response.raise_for_status()
-                file = os.path.join(directory, lecture.lecture_content_path.split('/')[-1])
-                with open(file, "w") as f:
-                    f.write(response.text)
-
     def save_lecture_content_pdf(self, directory):
-        lectures = self.get_lectures()
-
         options = webdriver.ChromeOptions()
         options.add_argument("--headless")
         driver = webdriver.Chrome(options=options)
         wait = WebDriverWait(driver, 15)
         driver.get("https://kitt.lewagon.com")
-        driver.add_cookie({'name': self.auth_cookie_kv[0], 'value': self.auth_cookie_kv[1], 'domain': 'kitt.lewagon.com'})
+        driver.add_cookie(
+            {'name': self.auth_cookie_kv[0], 'value': self.auth_cookie_kv[1], 'domain': 'kitt.lewagon.com'})
         driver.get("https://kitt.lewagon.com/camps/1133/lectures")
 
-        for lecture in lectures:
+        for lecture in self.get_lectures():
             if lecture.lecture_content_path:
                 print(f"Saving {lecture.name} to pdf")
                 url = f'{self.kitt_base_url}/{lecture.lecture_content_path}'
