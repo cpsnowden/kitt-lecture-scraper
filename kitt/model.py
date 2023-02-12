@@ -5,5 +5,6 @@ from dataclasses import dataclass
 class Lecture:
     week: str
     name: str
-    lecture_path: str
-    lecture_content_path: str
+
+    home_page_url: str
+    content_url: str

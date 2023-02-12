@@ -1,35 +1,32 @@
-import requests
 import os
-import base64
+
+import requests
 from bs4 import BeautifulSoup
+from typing import Generator
 from kitt.model import Lecture
-from selenium import webdriver
-from selenium.webdriver.support import expected_conditions as ec
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.print_page_options import PrintOptions
+from kitt.kitt_chrome import KittChrome
 
 
 class KittLectureScraper:
     kitt_base_url = 'https://kitt.lewagon.com'
 
-    def __init__(self, camp, auth_cookie):
+    def __init__(self, camp, auth_cookie_name, auth_cookie_value):
         """
         :param camp: the LeWagon camp number
         :param auth_cookie: a tuple containing the auth cookie (cookie_name, cookie_value)
         """
         self.camp = camp
-        self.camp_url = f'{self.kitt_base_url}/camps/{camp}'
-        self.auth_cookie_kv = auth_cookie
-        self.auth_cookie = {auth_cookie[0]: auth_cookie[1]}
+        self.auth_cookie_name = auth_cookie_name
+        self.auth_cookie_value = auth_cookie_value
+        self.auth_cookie_dict = {auth_cookie_name: auth_cookie_value}
 
-    def get_lectures_html(self) -> str:
-        response = requests.get(f'{self.camp_url}/lectures', cookies=self.auth_cookie)
+    def get_request_as_text(self, url: str) -> str:
+        response = requests.get(url, cookies=self.auth_cookie_dict)
         response.raise_for_status()
         return response.text
 
-    def get_lectures(self) -> list[Lecture]:
-        html = self.get_lectures_html()
+    def get_lectures(self) -> Generator[Lecture, None, None]:
+        html = self.get_request_as_text(self.resolve_url(f'camps/{self.camp}/lectures'))
         bs = BeautifulSoup(html, 'html.parser')
         for week in bs.find_all(class_='lecture-week-container'):
             week_title = week.find(class_='week-title').text
@@ -37,40 +34,39 @@ class KittLectureScraper:
                 lecture = self.parse_lecture_card(week_title, lecture_card_html)
                 yield lecture
 
-    def get_lecture_content_link(self, lecture_path) -> str:
-        response = requests.get(f'{self.kitt_base_url}/{lecture_path}', cookies=self.auth_cookie)
-        response.raise_for_status()
-        bs = BeautifulSoup(response.text, 'html.parser')
+    def get_lecture_content_link(self, lecture_url: str) -> str:
+        response = self.get_request_as_text(lecture_url)
+        bs = BeautifulSoup(response, 'html.parser')
         lecture_iframe = bs.find('iframe', {'id': 'karr_source_0'})
         return lecture_iframe.attrs['src'] if lecture_iframe else None
 
+    def resolve_url(self, path):
+        return f'{self.kitt_base_url}/{path}'
+
     def parse_lecture_card(self, week_title: str, lecture_bs: BeautifulSoup) -> Lecture:
         title = lecture_bs.find(class_='lecture-title').text.strip()
+
         print(f'Processing lecture: {title}')
+
+        # Get Lecture page url
         lecture_path = lecture_bs.find(class_='lecture-card-link').get('href').strip('/')
-        lecture_content_path = self.get_lecture_content_link(lecture_path)
-        lecture = Lecture(week_title, title, lecture_path, lecture_content_path)
+        lecture_url = self.resolve_url(lecture_path)
+
+        # Get HTML content url
+        lecture_content_path = self.get_lecture_content_link(lecture_url)
+        lecture_content_url = self.resolve_url(lecture_content_path)
+
+        lecture = Lecture(week_title, title, lecture_url, lecture_content_url)
         print(f'Parsed lecture: {lecture}')
+
         return lecture
 
     def save_lecture_content_pdf(self, directory):
-        options = webdriver.ChromeOptions()
-        options.add_argument("--headless")
-        driver = webdriver.Chrome(options=options)
-        wait = WebDriverWait(driver, 15)
-        driver.get("https://kitt.lewagon.com")
-        driver.add_cookie(
-            {'name': self.auth_cookie_kv[0], 'value': self.auth_cookie_kv[1], 'domain': 'kitt.lewagon.com'})
-        driver.get("https://kitt.lewagon.com/camps/1133/lectures")
-
+        kitt_chrome = KittChrome(self.kitt_base_url)
+        kitt_chrome.login(self.auth_cookie_name, self.auth_cookie_value)
         for lecture in self.get_lectures():
-            if lecture.lecture_content_path:
-                print(f"Saving {lecture.name} to pdf")
-                url = f'{self.kitt_base_url}/{lecture.lecture_content_path}'
-                driver.get(url)
-                wait.until(ec.visibility_of_element_located((By.XPATH, "//div[@id='notebook-container']")))
-
-                content = driver.print_page(PrintOptions())
-                file = os.path.join(directory, lecture.lecture_content_path.split('/')[-1]).replace('html', 'pdf')
-                with open(file, 'wb') as f:
-                    f.write(base64.b64decode(content))
+            if lecture.content_url:
+                file_name = lecture.content_url.split('/')[-1].replace('html', 'pdf')
+                print(f"Saving {lecture.name} to pdf {file_name}")
+                with open(os.path.join(directory, file_name), 'wb') as f:
+                    f.write(kitt_chrome.print_page_to_pdf(lecture.content_url))
