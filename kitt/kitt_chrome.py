@@ -1,4 +1,5 @@
 import base64
+import os.path
 from urllib.parse import urlparse
 
 from selenium.webdriver import ChromeOptions, Chrome
@@ -23,7 +24,15 @@ class KittChrome:
         # Trigger refresh
         self.driver.get(self.root_url)
 
-    def print_page_to_pdf(self, link):
+    def print_page_as_format(self, path, link, file_type='pdf'):
         self.driver.get(link)
+        print(f"Saving {link} to {path}")
+        if file_type == 'pdf':
+            self.__print_page_as_pdf(path)
+        else:
+            raise ValueError(f'Unsupported format {file_type}')
+
+    def __print_page_as_pdf(self, path):
         content = self.driver.print_page(PrintOptions())
-        return base64.b64decode(content)
+        with open(path + '.pdf', 'wb') as f:
+            f.write(base64.b64decode(content))
