@@ -15,7 +15,7 @@ cookie_value = <INSERT YOUR COOKIE HERE>
 save_directory = 'lectures'
 
 scraper = KittLectureScraper(camp_id, cookie_name, cookie_value)
-scraper.save_lecture_content_pdf(save_directory)
+scraper.save_lecture_content(save_directory)
 ```
 
 or run via command line

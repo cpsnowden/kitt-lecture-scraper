@@ -87,7 +87,7 @@ class KittLectureScraper:
                 lecture = self.__parse_lecture_card(week_title, lecture_card_html)
                 yield lecture
 
-    def save_lecture_content_pdf(self, directory, file_type='pdf'):
+    def save_lecture_content(self, directory, file_type='pdf'):
         """
         Save all the lectures for the camp to a given directory. If the directory
         does not exist, then it will be created
@@ -119,4 +119,4 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     scraper = KittLectureScraper(args.camp, args.cookie_name, args.cookie_value)
-    scraper.save_lecture_content_pdf(args.out, file_type='pdf')
+    scraper.save_lecture_content(args.out, file_type='pdf')
