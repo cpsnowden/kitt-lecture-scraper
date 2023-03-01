@@ -79,7 +79,6 @@ class KittLectureScraper:
         :return: a sequence of Lecture objects
         """
         html = self.__get_text(self.__resolve_url(f'camps/{self.camp}/lectures'))
-        print(html)
         bs = BeautifulSoup(html, 'html.parser')
         for week in bs.find_all(class_='lecture-week-container'):
             week_title = week.find(class_='week-title').text
